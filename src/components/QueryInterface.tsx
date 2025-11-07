@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Loader2, MessageSquare } from "lucide-react";
+import { Search, Loader2, MessageSquare, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 export const QueryInterface = () => {
   const [query, setQuery] = useState("");
   const [isQuerying, setIsQuerying] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [results, setResults] = useState<QueryResult[]>([]);
   const { toast } = useToast();
 
@@ -50,6 +51,73 @@ export const QueryInterface = () => {
     }
   };
 
+  const handleVoiceQuery = async () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      toast({
+        title: "Not Supported",
+        description: "Speech recognition is not supported in your browser.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      toast({
+        title: "Listening...",
+        description: "Speak your question now.",
+      });
+    };
+
+    recognition.onresult = async (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setIsListening(false);
+      setQuery(transcript);
+      setIsQuerying(true);
+
+      try {
+        const result = await api.queryDocument(transcript);
+        setResults(prev => [result, ...prev]);
+        setQuery("");
+        
+        toast({
+          title: "Voice Query Complete",
+          description: `Recognized: "${transcript}"`,
+        });
+      } catch (error) {
+        toast({
+          title: "Query Failed",
+          description: error instanceof Error ? error.message : "Failed to process voice query",
+          variant: "destructive",
+        });
+      } finally {
+        setIsQuerying(false);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      setIsListening(false);
+      toast({
+        title: "Recognition Error",
+        description: event.error === 'no-speech' ? 'No speech detected' : 'Speech recognition error',
+        variant: "destructive",
+      });
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
+
   return (
     <Card className="p-6">
       <h2 className="text-2xl font-semibold mb-4 text-foreground">Ask Questions</h2>
@@ -57,22 +125,37 @@ export const QueryInterface = () => {
         Query your uploaded documents using natural language questions.
       </p>
 
-      <div className="flex gap-2 mb-6">
-        <Input
-          placeholder="e.g., What are the key obligations in this contract?"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyPress={handleKeyPress}
-          disabled={isQuerying}
-          className="flex-1"
-        />
-        <Button onClick={handleQuery} disabled={isQuerying || !query.trim()}>
-          {isQuerying ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Search className="h-4 w-4" />
-          )}
-        </Button>
+      <div className="space-y-3 mb-6">
+        <div className="flex gap-2">
+          <Input
+            placeholder="e.g., What are the key obligations in this contract?"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isQuerying || isListening}
+            className="flex-1"
+          />
+          <Button onClick={handleVoiceQuery} disabled={isQuerying || isListening} variant="outline" size="icon">
+            {isListening ? (
+              <MicOff className="h-4 w-4 text-destructive" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
+          </Button>
+          <Button onClick={handleQuery} disabled={isQuerying || !query.trim() || isListening}>
+            {isQuerying ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+        {isListening && (
+          <div className="flex items-center gap-2 text-destructive animate-pulse">
+            <div className="h-3 w-3 rounded-full bg-destructive"></div>
+            <span className="text-sm font-medium">Recording...</span>
+          </div>
+        )}
       </div>
 
       {results.length > 0 && (
