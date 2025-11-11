@@ -20,6 +20,20 @@ export interface SpeechToTextResult {
   context_used: string[];
 }
 
+export interface SessionQuery {
+  query: string;
+  answer: string;
+  timestamp: string;
+}
+
+export interface Session {
+  session_id: string;
+  user_id: string;
+  created_at: string;
+  queries: SessionQuery[];
+  document_count: number;
+}
+
 export const api = {
   async analyzeDocuments(files: File[]): Promise<AnalysisResult> {
     const formData = new FormData();
@@ -30,6 +44,7 @@ export const api = {
     const response = await fetch(`${API_BASE_URL}/analyze`, {
       method: 'POST',
       body: formData,
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -45,6 +60,7 @@ export const api = {
       `${API_BASE_URL}/query?q=${encodeURIComponent(query)}&top_k=${topK}`,
       {
         method: 'GET',
+        credentials: 'include',
       }
     );
 
@@ -59,11 +75,40 @@ export const api = {
   async speechToText(): Promise<SpeechToTextResult> {
     const response = await fetch(`${API_BASE_URL}/speech-to-text/`, {
       method: 'POST',
+      credentials: 'include',
     });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Network error' }));
       throw new Error(error.detail || 'Failed to process speech');
+    }
+
+    return response.json();
+  },
+
+  async getSessions(): Promise<Session[]> {
+    const response = await fetch(`${API_BASE_URL}/sessions`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Network error' }));
+      throw new Error(error.detail || 'Failed to fetch sessions');
+    }
+
+    return response.json();
+  },
+
+  async getCurrentSession(): Promise<{ session_id: string; user_id: string }> {
+    const response = await fetch(`${API_BASE_URL}/session/current`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Network error' }));
+      throw new Error(error.detail || 'Failed to fetch current session');
     }
 
     return response.json();
